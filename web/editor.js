@@ -2,7 +2,8 @@
 
 var link = document.createElement("link");
 link.rel = "stylesheet";
-link.href = "https://raw.githubusercontent.com/EmileSpecialProducts/ESP-SPIFFS-Web-Server/refs/heads/main/web/editor.css";
+//link.href = "https://raw.githubusercontent.com/EmileSpecialProducts/ESP-SPIFFS-Web-Server/refs/heads/main/web/editor.css";
+link.href = "https://emilespecialproducts.github.io/ESP-SPIFFS-Web-Server/editor.css";
 document.head.appendChild(link);
 
 var script = document.createElement("script");
