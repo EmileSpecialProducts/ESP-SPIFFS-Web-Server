@@ -1,3 +1,5 @@
+#using assembly System.Net.Http
+using namespace System.Net.Http
 
 ################################################################################################################################
 function ESPSPIFFSuploadfile() {
@@ -7,7 +9,10 @@ function ESPSPIFFSuploadfile() {
         [Parameter(Mandatory = $false)][String] $Destinaionfilename 
     )
     if ([string]::IsNullOrWhiteSpace($Destinaionfilename)) { $Destinaionfilename ="/$(Split-Path $File -leaf)" }    
-    
+    if ($UploadURL.substring(0, 7).ToLower() -ne "http://" -or $UploadURL.substring(0, 8).ToLower() -ne "https://")
+    {
+        $UploadURL = "http://" + $UploadURL;
+    }
     #write-host $UploadURL $File $Destinaionfilename
      try {
     $httpClientHandler = New-Object System.Net.Http.HttpClientHandler
@@ -45,13 +50,10 @@ function ESPSPIFFSuploadfile() {
 }
 ################################################################################################################################
 
+
 $URI = "http://192.168.5.29"
-ESPSPIFFSuploadfile "$URI/edit" 'ddd.png' '/test/d2.png'
-Write-Host "responce = $a"
-# create a test file 
-"Testing $(get-date) " + [System.Guid]::NewGuid().ToString() > 'test.txt'
-# Upload a file
-ESPSPIFFSuploadfile "$URI/edit" 'test.txt' '/test2.txt'
+
+
 # Dir 
 Invoke-RestMethod -Uri "$URI/list?dir=/" -Method get
 Invoke-RestMethod -Uri "$URI/test2.txt" -Method get
@@ -63,13 +65,16 @@ curl -XDELETE "$URI/test2.txt"
 Invoke-RestMethod -Uri "$URI/list?dir=/test" -Method get
 Invoke-WebRequest -Uri "$URI/list?dir=/" -Method get
 Invoke-RestMethod -Uri "$URI/edit?path=/test.txt" -Method delete
-# Create dirctory
-Invoke-RestMethod -Uri "$URI/edit?path=/test" -Method put
+# Create dirctory is not supported on the SPIFFS
+# Invoke-RestMethod -Uri "$URI/edit?path=/test" -Method put
 # create file
 Invoke-RestMethod -Uri "$URI/edit?path=/test.txt" -Method put
-
-ESPSPIFFSuploadfile "$URI/edit" 'SDWebServer\test.txt' '/test2.txt'
-ESPSPIFFSuploadfile "$URI/edit" 'web\Mars.jpg' '/mars2.jpg'
+# Upload a file 
+# create a test file 
+"Testing $(get-date) " + [System.Guid]::NewGuid().ToString() > 'test.txt'
+# Upload a file
+ESPSPIFFSuploadfile "$URI/edit" 'test.txt' '/test2.txt'
+ESPSPIFFSuploadfile "$URI/edit" 'web\Mars.jpg' '/Mars2.jpg'
 
 ################################################################################################################################
 # This will stop the ESP32 WebServer but the file is uploaded
