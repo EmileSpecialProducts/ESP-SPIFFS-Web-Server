@@ -36,8 +36,13 @@
 #include <WiFiManager.h> // WifiManager by tzapu  https://github.com/tzapu/WiFiManager
 #include <ArduinoOTA.h>  // ArduinoOTA by Arduino, Juraj  https://github.com/JAndrassy/ArduinoOTA
 
+#if defined(ESP8266)
+#include <LittleFS.h>
+#include <FS.h>
+#else
 #include <SPIFFS.h>
 #include <FS.h>
+#endif
 
 #define debug_print // manages most of the print and println debug, not all but most
 
@@ -93,7 +98,7 @@ const char *host = "ESP-SPIFFS-S3";
 #define PIN_NEOPIXEL 48
 #endif
 #endif
-#define PIN_LED 12
+#define PIN_LED LED_BUILTIN
 
 #if defined(ESP8266)
 ESP8266WebServer server(80);
@@ -112,6 +117,7 @@ uint16_t Config_Reset_Counter = 0;
 int OTAUploadBusy = 0;
 
 File uploadFile;
+String message;
 
 void returnOK()
 {
@@ -155,7 +161,7 @@ bool loadFromSdCard(String path)
   else if (path.endsWith(".zip"))
     dataType = "application/zip";
   debugln(" GetFile dataType " + String(dataType));
-  File dataFile = SPIFFS.open(path);
+  File dataFile = SPIFFS.open(path, "r");
   size_t filesize = dataFile.size();
   ;
   if (!dataFile || filesize == 0)
@@ -210,7 +216,7 @@ void handleFileUpload()
   {
     if (SPIFFS.exists(upload.filename))
       SPIFFS.remove(upload.filename);
-    uploadFile = SPIFFS.open(upload.filename, FILE_WRITE);
+    uploadFile = SPIFFS.open(upload.filename, "w");
     debug("Upload: START, filename: ");
     debugln(upload.filename);
   }
@@ -257,7 +263,7 @@ void handleCreate()
     returnFail("BAD PATH");
     return;
   }
-  File file = SPIFFS.open(path, FILE_WRITE);
+  File file = SPIFFS.open(path, "w");
   if (file)
   {
     file.write((const uint8_t *)" ", 1); // must write one char
@@ -271,23 +277,22 @@ void handleCreate()
   returnOK();
 }
 
+#if defined(ESP8266)
 void printDirectory()
 {
+  String output;
+  bool foundfile;
   debugln(" DIR: ");
   server.setContentLength(CONTENT_LENGTH_UNKNOWN);
   server.send(200, "text/json", "");
-  WiFiClient client = server.client();
-  File root = SPIFFS.open("/");
-  File foundfile = root.openNextFile();
+  Dir dir = SPIFFS.openDir("/");
+  foundfile = dir.next();
   if (foundfile)
     server.sendContent("[");
   while (foundfile)
   {
-    String output;
-    output = "{\"type\":\"file\"";
-    output += ",\"name\":\"" + String(foundfile.name()) + "\"";
-    output += ",\"size\":\"" + String(foundfile.size()) + "\"}";
-    foundfile = root.openNextFile();
+    output = "{\"type\":\"file\",\"name\":\"" + String(dir.fileName().substring(1)) + "\",\"size\":\"" + String(dir.fileSize()) + "\"}";
+    foundfile = dir.next();
     if (foundfile)
       output += ',';
     else
@@ -295,9 +300,33 @@ void printDirectory()
     debugln("Dir: " + output);
     server.sendContent(output);
   }
-  server.client().flush();
+}
+#else
+void printDirectory()
+{
+  String output;
+  debugln(" DIR: ");
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server.send(200, "text/json", "");
+  // WiFiClient client = server.client();
+  File root = SPIFFS.open("/", "r");
+  File foundfile = root.openNextFile();
+  if (foundfile)
+    server.sendContent("[");
+  while (foundfile)
+  {
+    output = "{\"type\":\"file\",\"name\":\"" + String(foundfile.name()) + "\",\"size\":\"" + String(foundfile.size()) + "\"}";
+    foundfile = root.openNextFile();
+    if (foundfile)
+      output += ',';
+    else
+      output += ']';
+    server.sendContent(output);
+  }
+  // server.client().flush();
   root.close();
 }
+#endif
 
 String urlDecode(const String &text)
 {
@@ -374,7 +403,7 @@ void Log(String Str)
 {
   debugln(Str);
 #if defined(ESP8266)
-  File LogFile = SPIFFS.open("/log.txt", FILE_WRITE | O_APPEND);
+  File LogFile = SPIFFS.open("/log.txt", "a"); // FILE_WRITE | O_APPEND);
 #else
   File LogFile = SPIFFS.open("/log.txt", FILE_APPEND);
 #endif
@@ -507,8 +536,12 @@ void setup(void)
       debugln("End Failed");
     } });
   ArduinoOTA.begin();
-  debug("SPIFFS : ");      // SPIFFS.begin can take 10 seconds to start formating
+  debug("SPIFFS : "); // SPIFFS.begin can take 10 seconds to start formating
+#if defined(ESP8266)
+  if (!SPIFFS.begin())
+#else
   if (!SPIFFS.begin(true)) // FORMAT_SPIFFS_IF_FAILED
+#endif
   {
     debugln(" Mount Failed");
   }
@@ -530,7 +563,7 @@ void setup(void)
   server.begin();
   debugln("HTTP server started");
 
-  String message = "Reboot from: ";
+  message = "Reboot from: ";
 #if defined(ESP8266)
   message += ESP.getChipId();
 #else
@@ -585,6 +618,10 @@ void setup(void)
     message += String(ESP.getFlashChipMode());
   }
 #endif
+#endif
+#if not defined(ESP8266)
+  message += " esp_idf_version: " + String(esp_get_idf_version());
+  message += " arduino_version: " + String(ESP_ARDUINO_VERSION_MAJOR) + "." + String(ESP_ARDUINO_VERSION_MINOR) + "." + String(ESP_ARDUINO_VERSION_PATCH);
 #endif
   message += " Build Date: " + String(__DATE__ " " __TIME__);
   Log(message);
